@@ -295,7 +295,9 @@
       rows.forEach(function (r) { $("results").appendChild(card(r)); });
       offset += rows.length;
       var shown = $("results").children.length;
-      $("status").textContent = shown === 0 ? "該当する記録はありません。" :
+      var filtered = selectedSeverities().length || $("from").value || $("to").value || $("kev").checked || $("noauto").checked;
+      $("status").textContent = shown === 0
+        ? "該当する記録はありません。" + (filtered ? "（重大度・期間などの絞り込みを外すと見つかる場合があります）" : "") :
         (total != null ? total + "件中 " + shown + "件を表示" : shown + "件を表示");
       $("more").hidden = !(rows.length === PAGE && (total == null || shown < total));
     } catch (e) {
@@ -335,14 +337,28 @@
     return location.hash.length > 1;
   }
 
-  function toggle(c) { c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true"); }
+  // 初期表示で自動選択した「緊急・高」かどうか。利用者が自分で選んだ場合は絞り込みを尊重する
+  var autoSev = false;
+  function toggle(c) {
+    autoSev = false;
+    c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true");
+  }
   document.querySelectorAll(".chip").forEach(function (c) {
     c.addEventListener("click", function () { toggle(c); });
     c.addEventListener("keydown", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(c); } });
   });
-  $("form").addEventListener("submit", function (e) { e.preventDefault(); run(true); });
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    // 自動選択の「緊急・高」のまま探すと、重大度の低い記録が見つからないため、語を入れて探すときは外す
+    if (autoSev && (clean($("kw").value) || clean($("cve").value) || clean($("prod").value))) {
+      document.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
+      autoSev = false;
+    }
+    run(true);
+  });
   $("more").addEventListener("click", function () { run(false); });
   $("clearBtn").addEventListener("click", function () {
+    autoSev = false;
     $("form").reset(); document.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
     $("results").textContent = ""; $("status").textContent = ""; $("more").hidden = true;
     history.replaceState(null, "", location.pathname + location.search);
@@ -371,6 +387,7 @@
       document.querySelectorAll('.chip[data-sev="緊急"], .chip[data-sev="高"]').forEach(function (c) {
         c.setAttribute("aria-pressed", "true");
       });
+      autoSev = true;
     }
     if (loadSession()) { showSearch(); run(true); } else { showLogin(); }
   }
