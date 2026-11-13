@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTI 脅威情報検索</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --sub: #5d6678; --line: #dfe3ea;
+    --accent: #1a4f8a; --accent-text: #ffffff; --chip: #eef1f6;
+    --c-urgent: #b3001b; --c-high: #d75a00; --c-mid: #b58900; --c-low: #4a7c59; --c-info: #3b6ea5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1c212b; --text: #e8ebf1; --sub: #9aa3b5; --line: #2d3442;
+      --accent: #6aa3e8; --accent-text: #0d1117; --chip: #272e3b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6;
+         font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; }
+  header { padding: 14px 16px 6px; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0; }
+  main { max-width: 760px; margin: 0 auto; padding: 0 12px 48px; }
+  form { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  label { display: block; font-size: 12px; color: var(--sub); margin: 10px 0 4px; }
+  input[type=text], input[type=date], input[type=email], input[type=password] {
+    width: 100%; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text);
+  }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; min-width: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .chip { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip);
+          font-size: 14px; color: var(--text); cursor: pointer; user-select: none; }
+  .chip[aria-pressed=true] { color: #fff; border-color: transparent; }
+  .chip[data-sev="緊急"][aria-pressed=true] { background: var(--c-urgent); }
+  .chip[data-sev="高"][aria-pressed=true] { background: var(--c-high); }
+  .chip[data-sev="中"][aria-pressed=true] { background: var(--c-mid); }
+  .chip[data-sev="低"][aria-pressed=true] { background: var(--c-low); }
+  .chip[data-sev="情報"][aria-pressed=true] { background: var(--c-info); }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 14px; }
+  .checks label { margin: 0; color: var(--text); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  button { font-size: 16px; padding: 11px 16px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--chip); color: var(--text); cursor: pointer; }
+  button.primary { flex: 1; background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+  #status { margin: 14px 4px 8px; font-size: 14px; color: var(--sub); }
+  #notice { margin: 14px 0; padding: 12px; border-radius: 10px; background: var(--card);
+            border: 1px solid var(--c-high); font-size: 14px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-left: 6px solid var(--sev, var(--line));
+          border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--sub); }
+  .badge { color: #fff; padding: 2px 9px; border-radius: 999px; font-weight: 600; background: var(--sev, var(--sub)); }
+  .tag { padding: 1px 7px; border-radius: 6px; background: var(--chip); }
+  .tag.kev { background: var(--c-urgent); color: #fff; }
+  .title { display: block; margin: 6px 0 4px; font-size: 16px; font-weight: 600; color: var(--accent);
+           text-decoration: none; word-break: break-word; }
+  .prod { font-size: 12px; color: var(--sub); margin-bottom: 4px; word-break: break-word; }
+  .sum { font-size: 14px; word-break: break-word; }
+  details { margin-top: 8px; font-size: 14px; }
+  summary { color: var(--accent); cursor: pointer; }
+  details p { margin: 6px 0; word-break: break-word; }
+  details .why { color: var(--sub); font-size: 13px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #logoutBtn { font-size: 13px; padding: 6px 12px; }
+  #loginError { margin-top: 10px; font-size: 14px; color: var(--c-urgent); }
+  #more { display: block; width: 100%; margin-top: 4px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CTI 脅威情報検索</h1>
+  <button type="button" id="logoutBtn" hidden>ログアウト</button>
+</header>
+<main>
+  <div id="notice" hidden></div>
+  <form id="loginForm" hidden>
+    <label for="email">メールアドレス</label>
+    <input id="email" type="email" autocomplete="username" inputmode="email" required>
+    <label for="password">パスワード</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <div class="actions"><button type="submit" class="primary">ログイン</button></div>
+    <div id="loginError" role="alert"></div>
+  </form>
+  <form id="form" autocomplete="off" hidden>
+    <label for="kw">キーワード（記事タイトル・要約・製品名から検索）</label>
+    <input id="kw" type="text" placeholder="例: ランサムウェア、病院、VPN">
+    <div class="row">
+      <div><label for="cve">CVE番号</label><input id="cve" type="text" placeholder="CVE-2026-12345"></div>
+      <div><label for="prod">製品名・ベンダー名</label><input id="prod" type="text" placeholder="例: papercut"></div>
+    </div>
+    <label>重大度（未選択なら全て）</label>
+    <div class="chips" id="sevs">
+      <span class="chip" role="button" tabindex="0" aria-pressed="false" data-sev="緊急">緊急</span>
+      <span class="chip" role="button" tabindex="0" aria-pressed="false" data-sev="高">高</span>
+      <span class="chip" role="button" tabindex="0" aria-pressed="false" data-sev="中">中</span>
+      <span class="chip" role="button" tabindex="0" aria-pressed="false" data-sev="低">低</span>
+      <span class="chip" role="button" tabindex="0" aria-pressed="false" data-sev="情報">情報</span>
+    </div>
+    <div class="row">
+      <div><label for="from">公開日（から）</label><input id="from" type="date"></div>
+      <div><label for="to">公開日（まで）</label><input id="to" type="date"></div>
+    </div>
+    <div class="checks">
+      <label><input id="kev" type="checkbox"> 悪用確認済み(KEV)のみ</label>
+      <label><input id="noauto" type="checkbox"> 暫定判定を除く</label>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">検索</button>
+      <button type="button" id="clearBtn">クリア</button>
+    </div>
+  </form>
+
+  <div id="status" role="status"></div>
+  <div id="results"></div>
+  <button id="more" type="button" hidden>さらに表示</button>
+</main>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  "use strict";
+  var PAGE = 30;
+  var FIELDS = "id,published_at,published_date,severity,category,cve_id,cvss_score,kev_listed," +
+    "auto_classified,title,url,summary_ja,detail_ja,summary_raw,severity_rationale,product_text,source_name";
+  var SEV_COLOR = { "緊急": "var(--c-urgent)", "高": "var(--c-high)", "中": "var(--c-mid)",
+                    "低": "var(--c-low)", "情報": "var(--c-info)" };
+  var cfg = window.CTI_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var offset = 0, total = null, busy = false, lastQuery = null;
+
+  function configured() {
+    return cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && cfg.SUPABASE_URL.indexOf("YOUR-") === -1;
+  }
+
+  // PostgRESTのフィルタ値に使えない記号を除く（or=(...) の区切りや引用符を壊すため）
+  function clean(text) { return text.replace(/[,()*"\\%]/g, " ").replace(/\s+/g, " ").trim(); }
+  function normProduct(text) { return clean(text).toLowerCase().replace(/_/g, " "); }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+
+  function selectedSeverities() {
+    return Array.prototype.filter.call(document.querySelectorAll(".chip"), function (c) {
+      return c.getAttribute("aria-pressed") === "true";
+    }).map(function (c) { return c.dataset.sev; });
+  }
+
+  function orGroup(columns, text) {
+    return columns.map(function (c) { return c + ".ilike.*" + text + "*"; }).join(",");
+  }
+
+  function buildParams() {
+    var p = new URLSearchParams();
+    p.set("select", FIELDS);
+    p.set("order", "published_at.desc.nullslast");
+
+    var groups = [];
+    var kw = clean($("kw").value);
+    if (kw) groups.push(orGroup(["title", "summary_raw", "summary_ja", "product_text"], kw));
+    var cve = clean($("cve").value).toUpperCase();
+    if (cve) p.append("cve_id", "eq." + cve);
+    // 製品名の列に加えてタイトル・要約も見る（NVD未分析の記事は製品名の列が空のため）
+    var prod = normProduct($("prod").value);
+    if (prod) groups.push(orGroup(["product_text", "title", "summary_raw", "summary_ja"], prod));
+    var sevs = selectedSeverities();
+    if (sevs.length) p.append("severity", "in.(" + sevs.join(",") + ")");
+    if ($("from").value) p.append("published_date", "gte." + $("from").value);
+    if ($("to").value) p.append("published_date", "lte." + $("to").value);
+    if ($("kev").checked) p.append("kev_listed", "is.true");
+    if ($("noauto").checked) p.append("auto_classified", "is.false");
+    if (groups.length === 1) p.append("or", "(" + groups[0] + ")");
+    else if (groups.length > 1) p.append("and", "(" + groups.map(function (g) { return "or(" + g + ")"; }).join(",") + ")");
+    return p;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function card(r) {
+    var c = el("article", "item");
+    c.style.setProperty("--sev", SEV_COLOR[r.severity] || "var(--sub)");
+
+    var meta = el("div", "meta");
+    meta.appendChild(el("span", "badge", r.severity || "—"));
+    if (r.published_date) meta.appendChild(el("span", "", r.published_date));
+    if (r.source_name) meta.appendChild(el("span", "", r.source_name));
+    if (r.cve_id) meta.appendChild(el("span", "tag", r.cve_id));
+    if (r.cvss_score) meta.appendChild(el("span", "tag", "CVSS " + r.cvss_score));
+    if (r.kev_listed) meta.appendChild(el("span", "tag kev", "悪用確認済み"));
+    if (r.auto_classified) meta.appendChild(el("span", "tag", "暫定判定"));
+    c.appendChild(meta);
+
+    var href = safeUrl(r.url);
+    var title = r.title || "(無題)";
+    if (href) {
+      var a = el("a", "title", title);
+      a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+      c.appendChild(a);
+    } else {
+      c.appendChild(el("span", "title", title));
+    }
+    if (r.product_text) c.appendChild(el("div", "prod", "対象製品: " + r.product_text));
+
+    var summary = r.summary_ja || (r.summary_raw || "").slice(0, 160);
+    if (summary) c.appendChild(el("div", "sum", summary));
+
+    if (r.detail_ja || (r.severity_rationale && !r.auto_classified)) {
+      var d = el("details");
+      d.appendChild(el("summary", "", "詳細・判定根拠"));
+      if (r.detail_ja) d.appendChild(el("p", "", r.detail_ja));
+      if (r.severity_rationale && !r.auto_classified) d.appendChild(el("p", "why", "判定根拠: " + r.severity_rationale));
+      c.appendChild(d);
+    }
+    return c;
+  }
+
+  var SESSION_KEY = "cti_session";
+  function base() { return cfg.SUPABASE_URL.replace(/\/$/, ""); }
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
+  }
+  function saveSession(s) { try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) {} }
+  function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+
+  // パスワードやリフレッシュトークンで認証し、アクセストークンと有効期限を端末に保存する
+  async function authToken(grant, body) {
+    var res = await fetch(base() + "/auth/v1/token?grant_type=" + grant, {
+      method: "POST",
+      headers: { apikey: cfg.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { var err = new Error("auth " + res.status); err.status = res.status; throw err; }
+    var d = await res.json();
+    var s = { access_token: d.access_token, refresh_token: d.refresh_token,
+              expires_at: Date.now() + (d.expires_in || 3600) * 1000 };
+    saveSession(s);
+    return s;
+  }
+
+  // 有効期限が近ければ更新し、使えるアクセストークンを返す。無ければ null（要ログイン）
+  async function accessToken(force) {
+    var s = loadSession();
+    if (!s) return null;
+    if (!force && Date.now() < s.expires_at - 60000) return s.access_token;
+    try { return (await authToken("refresh_token", { refresh_token: s.refresh_token })).access_token; }
+    catch (e) { clearSession(); return null; }
+  }
+
+  function showLogin(message) {
+    $("loginForm").hidden = false; $("form").hidden = true; $("logoutBtn").hidden = true;
+    $("results").textContent = ""; $("status").textContent = ""; $("more").hidden = true;
+    $("loginError").textContent = message || "";
+  }
+  function showSearch() {
+    $("loginForm").hidden = true; $("form").hidden = false; $("logoutBtn").hidden = false;
+  }
+
+  async function fetchRows(url, token) {
+    return fetch(url, {
+      headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, Prefer: "count=exact" }
+    });
+  }
+
+  async function run(reset) {
+    if (busy) return;
+    if (!configured()) { showNotice(); return; }
+    var token = await accessToken(false);
+    if (!token) { showLogin(); return; }
+    busy = true;
+    if (reset) { offset = 0; total = null; $("results").textContent = ""; lastQuery = buildParams(); saveHash(); }
+    $("status").textContent = "検索中…";
+    $("more").hidden = true;
+
+    try {
+      var url = base() + "/rest/v1/items?" + lastQuery.toString() + "&limit=" + PAGE + "&offset=" + offset;
+      var res = await fetchRows(url, token);
+      if (res.status === 401) {
+        token = await accessToken(true);
+        if (!token) { showLogin("ログインの有効期限が切れました。もう一度ログインしてください。"); return; }
+        res = await fetchRows(url, token);
+      }
+      if (!res.ok) {
+        var hint = res.status === 401 || res.status === 403 ? "（権限を確認してください）" : "";
+        throw new Error("HTTP " + res.status + hint);
+      }
+      var rows = await res.json();
+      var range = res.headers.get("Content-Range");
+      if (range && range.indexOf("/") > -1) total = parseInt(range.split("/")[1], 10);
+
+      rows.forEach(function (r) { $("results").appendChild(card(r)); });
+      offset += rows.length;
+      var shown = $("results").children.length;
+      $("status").textContent = shown === 0 ? "該当する記録はありません。" :
+        (total != null ? total + "件中 " + shown + "件を表示" : shown + "件を表示");
+      $("more").hidden = !(rows.length === PAGE && (total == null || shown < total));
+    } catch (e) {
+      $("status").textContent = "検索に失敗しました: " + e.message;
+    } finally {
+      busy = false;
+    }
+  }
+
+  function showNotice() {
+    var n = $("notice");
+    n.hidden = false;
+    n.textContent = "接続設定が未完了です。web/config.js に Supabase の URL と公開キー(anon key)を設定してください。";
+  }
+
+  // 検索条件をURLの # 以降に残し、ブックマークや共有で同じ検索を再現できるようにする
+  function saveHash() {
+    var s = new URLSearchParams();
+    [["kw", "q"], ["cve", "cve"], ["prod", "p"], ["from", "from"], ["to", "to"]].forEach(function (m) {
+      if ($(m[0]).value) s.set(m[1], $(m[0]).value);
+    });
+    var sevs = selectedSeverities(); if (sevs.length) s.set("s", sevs.join(","));
+    if ($("kev").checked) s.set("kev", "1");
+    if ($("noauto").checked) s.set("noauto", "1");
+    history.replaceState(null, "", s.toString() ? "#" + s.toString() : location.pathname + location.search);
+  }
+
+  function loadHash() {
+    var s = new URLSearchParams(location.hash.replace(/^#/, ""));
+    $("kw").value = s.get("q") || ""; $("cve").value = s.get("cve") || ""; $("prod").value = s.get("p") || "";
+    $("from").value = s.get("from") || ""; $("to").value = s.get("to") || "";
+    $("kev").checked = s.get("kev") === "1"; $("noauto").checked = s.get("noauto") === "1";
+    var sevs = (s.get("s") || "").split(",");
+    document.querySelectorAll(".chip").forEach(function (c) {
+      c.setAttribute("aria-pressed", sevs.indexOf(c.dataset.sev) > -1 ? "true" : "false");
+    });
+    return location.hash.length > 1;
+  }
+
+  function toggle(c) { c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true"); }
+  document.querySelectorAll(".chip").forEach(function (c) {
+    c.addEventListener("click", function () { toggle(c); });
+    c.addEventListener("keydown", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(c); } });
+  });
+  $("form").addEventListener("submit", function (e) { e.preventDefault(); run(true); });
+  $("more").addEventListener("click", function () { run(false); });
+  $("clearBtn").addEventListener("click", function () {
+    $("form").reset(); document.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
+    $("results").textContent = ""; $("status").textContent = ""; $("more").hidden = true;
+    history.replaceState(null, "", location.pathname + location.search);
+  });
+
+  $("loginForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    $("loginError").textContent = "ログイン中…";
+    try {
+      await authToken("password", { email: $("email").value.trim(), password: $("password").value });
+      $("password").value = "";
+      showSearch();
+      run(true);
+    } catch (err) {
+      $("loginError").textContent = err.status === 400
+        ? "メールアドレスまたはパスワードが違います。"
+        : "ログインに失敗しました（" + err.message + "）。";
+    }
+  });
+  $("logoutBtn").addEventListener("click", function () { clearSession(); showLogin(); });
+
+  if (!configured()) { showNotice(); }
+  else {
+    // 条件なしで開いたときは、最新の緊急・高を見せる
+    if (!loadHash()) {
+      document.querySelectorAll('.chip[data-sev="緊急"], .chip[data-sev="高"]').forEach(function (c) {
+        c.setAttribute("aria-pressed", "true");
+      });
+    }
+    if (loadSession()) { showSearch(); run(true); } else { showLogin(); }
+  }
+})();
+</script>
+</body>
+</html>
