@@ -65,6 +65,7 @@
   header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   #logoutBtn { font-size: 13px; padding: 6px 12px; }
   #loginError { margin-top: 10px; font-size: 14px; color: var(--c-urgent); }
+  #conds { margin: 0 4px 10px; font-size: 12px; color: var(--sub); word-break: break-word; }
   #more { display: block; width: 100%; margin-top: 4px; }
   [hidden] { display: none !important; }
 </style>
@@ -114,6 +115,7 @@
   </form>
 
   <div id="status" role="status"></div>
+  <div id="conds"></div>
   <div id="results"></div>
   <button id="more" type="button" hidden>さらに表示</button>
 </main>
@@ -172,6 +174,21 @@
     if (groups.length === 1) p.append("or", "(" + groups[0] + ")");
     else if (groups.length > 1) p.append("and", "(" + groups.map(function (g) { return "or(" + g + ")"; }).join(",") + ")");
     return p;
+  }
+
+  // 今どの条件で絞っているかを文章にする。条件はすべてに当てはまるものだけが表示される（AND）ため、
+  // 前回の入力が残っていて少なく見える、という見落としを防ぐ
+  function describeConditions() {
+    var parts = [];
+    var kw = clean($("kw").value), cve = clean($("cve").value), prod = clean($("prod").value);
+    if (kw) parts.push("キーワード「" + kw + "」");
+    if (cve) parts.push("CVE番号「" + cve + "」");
+    if (prod) parts.push("製品名「" + prod + "」");
+    var sevs = selectedSeverities(); if (sevs.length) parts.push("重大度: " + sevs.join("・"));
+    if ($("from").value || $("to").value) parts.push("公開日: " + ($("from").value || "…") + " 〜 " + ($("to").value || "…"));
+    if ($("kev").checked) parts.push("悪用確認済みのみ");
+    if ($("noauto").checked) parts.push("暫定判定を除く");
+    return parts.length ? "条件（すべてに当てはまるものを表示）: " + parts.join(" ／ ") : "条件: なし（全件）";
   }
 
   function el(tag, cls, text) {
@@ -272,7 +289,7 @@
     var token = await accessToken(false);
     if (!token) { showLogin(); return; }
     busy = true;
-    if (reset) { offset = 0; total = null; $("results").textContent = ""; lastQuery = buildParams(); saveHash(); }
+    if (reset) { offset = 0; total = null; $("results").textContent = ""; lastQuery = buildParams(); saveHash(); $("conds").textContent = describeConditions(); }
     $("status").textContent = "検索中…";
     $("more").hidden = true;
 
@@ -360,7 +377,7 @@
   $("clearBtn").addEventListener("click", function () {
     autoSev = false;
     $("form").reset(); document.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
-    $("results").textContent = ""; $("status").textContent = ""; $("more").hidden = true;
+    $("results").textContent = ""; $("status").textContent = ""; $("conds").textContent = ""; $("more").hidden = true;
     history.replaceState(null, "", location.pathname + location.search);
   });
 
